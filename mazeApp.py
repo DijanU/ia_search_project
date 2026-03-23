@@ -10,15 +10,16 @@ import streamlit as st
 import pandas as pd
 
 # ─── Configuración de página ───────────────────────────────────────────────────
-st.set_page_config(page_title="Maze Solver", layout="wide", page_icon="🧩")
+st.set_page_config(page_title="Maze Solver", layout="wide", page_icon="🗺️")
 
 st.markdown("""
 <style>
     .metric-box { background:#f8f9fa; border-radius:10px; padding:12px 16px; text-align:center; }
-    .metric-label { font-size:12px; color:#888; text-transform:uppercase; letter-spacing:1px; }
-    .metric-value { font-size:28px; font-weight:600; color:#1a1a2e; }
+    .metric-label { font-size:12px; color:#333; text-transform:uppercase; letter-spacing:1px; }
+    .metric-value { font-size:28px; font-weight:600; color:#000000 !important; }
     .stDataFrame { font-size: 13px; }
-    div[data-testid="stMetric"] { background:#f8f9fa; border-radius:10px; padding:10px; }
+    div[data-testid="stMetric"] { background:#000000; border-radius:10px; padding:10px; }
+    div[data-testid="stMetric"] > div { color:#000000 !important; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -29,12 +30,14 @@ def heuristica(a, b, tipo='manhattan'):
         return abs(a[0]-b[0]) + abs(a[1]-b[1])
     return math.sqrt((a[0]-b[0])**2 + (a[1]-b[1])**2)
 
-def get_vecinos(estado, grid):
+def get_vecinos(estado, grid, invertido=False):
     rows, cols = len(grid), len(grid[0])
     for dr, dc in [(-1,0),(0,1),(1,0),(0,-1)]:
         nr, nc = estado[0]+dr, estado[1]+dc
-        if 0 <= nr < rows and 0 <= nc < cols and grid[nr][nc] != '0':
-            yield (nr, nc)
+        if 0 <= nr < rows and 0 <= nc < cols:
+            es_pasillo = (grid[nr][nc] != '0') if not invertido else (grid[nr][nc] == '0')
+            if es_pasillo:
+                yield (nr, nc)
 
 def reconstruir(parent, end):
     path = []
@@ -44,7 +47,7 @@ def reconstruir(parent, end):
         cur = parent[cur]
     return path[::-1]
 
-def bfs(grid, inicio, meta):
+def bfs(grid, inicio, meta, invertido=False):
     t0 = time.time()
     queue = deque([inicio])
     parent = {inicio: None}
@@ -56,13 +59,13 @@ def bfs(grid, inicio, meta):
         nodos += 1
         if cur == meta:
             return reconstruir(parent, cur), nodos, time.time()-t0, visited_order
-        for nb in get_vecinos(cur, grid):
+        for nb in get_vecinos(cur, grid, invertido):
             if nb not in parent:
                 parent[nb] = cur
                 queue.append(nb)
     return None, nodos, time.time()-t0, visited_order
 
-def dfs(grid, inicio, meta):
+def dfs(grid, inicio, meta, invertido=False):
     t0 = time.time()
     stack = [inicio]
     parent = {inicio: None}
@@ -74,13 +77,13 @@ def dfs(grid, inicio, meta):
         nodos += 1
         if cur == meta:
             return reconstruir(parent, cur), nodos, time.time()-t0, visited_order
-        for nb in reversed(list(get_vecinos(cur, grid))):
+        for nb in reversed(list(get_vecinos(cur, grid, invertido))):
             if nb not in parent:
                 parent[nb] = cur
                 stack.append(nb)
     return None, nodos, time.time()-t0, visited_order
 
-def greedy(grid, inicio, meta, h_tipo='manhattan'):
+def greedy(grid, inicio, meta, h_tipo='manhattan', invertido=False):
     t0 = time.time()
     pq = [(heuristica(inicio, meta, h_tipo), inicio)]
     parent = {inicio: None}
@@ -92,13 +95,13 @@ def greedy(grid, inicio, meta, h_tipo='manhattan'):
         nodos += 1
         if cur == meta:
             return reconstruir(parent, cur), nodos, time.time()-t0, visited_order
-        for nb in get_vecinos(cur, grid):
+        for nb in get_vecinos(cur, grid, invertido):
             if nb not in parent:
                 parent[nb] = cur
                 heapq.heappush(pq, (heuristica(nb, meta, h_tipo), nb))
     return None, nodos, time.time()-t0, visited_order
 
-def a_star(grid, inicio, meta, h_tipo='manhattan'):
+def a_star(grid, inicio, meta, h_tipo='manhattan', invertido=False):
     t0 = time.time()
     pq = [(heuristica(inicio, meta, h_tipo), 0, inicio)]
     parent = {inicio: None}
@@ -113,7 +116,7 @@ def a_star(grid, inicio, meta, h_tipo='manhattan'):
         nodos += 1
         if cur == meta:
             return reconstruir(parent, cur), nodos, time.time()-t0, visited_order
-        for nb in get_vecinos(cur, grid):
+        for nb in get_vecinos(cur, grid, invertido):
             ng = g + 1
             if ng < g_score.get(nb, float('inf')):
                 g_score[nb] = ng
@@ -128,13 +131,14 @@ def calcular_bf(nodos, profundidad):
 
 # ─── Visualización ─────────────────────────────────────────────────────────────
 
-def render_maze(grid, visited=None, path=None, start=None, end=None):
+def render_maze(grid, visited=None, path=None, start=None, end=None, invertido=False):
     rows, cols = len(grid), len(grid[0])
     img = np.ones((rows, cols, 3))
 
     for r in range(rows):
         for c in range(cols):
-            if grid[r][c] == '0':
+            es_pared = (grid[r][c] == '0') if not invertido else (grid[r][c] != '0')
+            if es_pared:
                 img[r, c] = [0.1, 0.1, 0.1]       # pared: casi negro
             else:
                 img[r, c] = [1.0, 1.0, 1.0]        # pasillo: blanco
@@ -201,8 +205,18 @@ with st.sidebar:
     ])
 
     st.divider()
+    invertido = st.checkbox("🔄 Invertir pasillos/paredes", value=False)
+
+    st.divider()
     st.subheader("🎲 Puntos aleatorios")
     num_aleatorios = st.slider("Número de pruebas", 1, 10, 3)
+    
+    col_ini, col_fin = st.columns(2)
+    with col_ini:
+        random_inicio = st.checkbox("Inicio aleatorio", value=True)
+    with col_fin:
+        random_fin = st.checkbox("Fin aleatorio", value=False)
+    
     correr_aleatorios = st.button("Ejecutar simulación aleatoria", use_container_width=True)
 
     st.divider()
@@ -257,7 +271,7 @@ if resolver:
 
     progress = st.progress(0, text="Ejecutando algoritmos...")
     for i, (nombre, (fn, kwargs)) in enumerate(to_run):
-        path, nodos, t, visited = fn(grid, inicio, meta, **kwargs)
+        path, nodos, t, visited = fn(grid, inicio, meta, invertido=invertido, **kwargs)
         st.session_state.results.append({
             'nombre': nombre,
             'path': path,
@@ -305,7 +319,7 @@ if st.session_state.results:
         c3.metric("Tiempo (s)", f"{r['tiempo']:.6f}")
         c4.metric("Branching Factor", calcular_bf(r['nodos'], length))
 
-        fig = render_maze(grid, r['visited'], r['path'], inicio, meta)
+        fig = render_maze(grid, r['visited'], r['path'], inicio, meta, invertido)
         st.pyplot(fig, use_container_width=True)
 
     else:
@@ -320,7 +334,7 @@ if st.session_state.results:
                 length = len(r['path']) if r['path'] else 0
                 with col:
                     st.markdown(f"**{r['nombre']}** — {length} pasos · {r['nodos']:,} nodos · {r['tiempo']:.4f}s")
-                    fig = render_maze(grid, r['visited'], r['path'], inicio, meta)
+                    fig = render_maze(grid, r['visited'], r['path'], inicio, meta, invertido)
                     st.pyplot(fig, use_container_width=True)
 
 # ─── Simulación aleatoria ─────────────────────────────────────────────────────
@@ -329,26 +343,38 @@ if correr_aleatorios and grid is not None:
     st.divider()
     st.subheader(f"🎲 Simulación con {num_aleatorios} puntos de partida aleatorios")
 
+    # Filtrar celdas libres según el modo de inversión
     celdas_libres = [(r, c) for r in range(len(grid))
                      for c in range(len(grid[0]))
-                     if grid[r][c] == '0']
+                     if ((grid[r][c] != '0') if not invertido else (grid[r][c] == '0'))]
 
     if len(celdas_libres) < num_aleatorios:
         st.warning("No hay suficientes celdas libres.")
     else:
-        inicios_rand = random.sample(celdas_libres, num_aleatorios)
+        if random_inicio:
+            inicios_rand = random.sample(celdas_libres, num_aleatorios)
+        else:
+            inicios_rand = [inicio] * num_aleatorios
+        
+        # Generar metas aleatorias si está habilitado
+        if random_fin:
+            metas_rand = [random.choice(celdas_libres) for _ in range(num_aleatorios)]
+        else:
+            metas_rand = [meta] * num_aleatorios
+        
         # Ordenar por distancia manhattan a la meta
-        inicios_rand.sort(key=lambda p: heuristica(p, meta, 'manhattan'))
-
+        inicios_rand.sort(key=lambda p: heuristica(p, metas_rand[0], 'manhattan'))
+        
         rand_rows = []
-        for i, ini in enumerate(inicios_rand):
-            dist = heuristica(ini, meta, 'manhattan')
+        for i, (ini, fin) in enumerate(zip(inicios_rand, metas_rand)):
+            dist = heuristica(ini, fin, 'manhattan')
             for nombre, (fn, kwargs) in ALGOS.items():
-                path, nodos, t, _ = fn(grid, ini, meta, **kwargs)
+                path, nodos, t, _ = fn(grid, ini, fin, invertido=invertido, **kwargs)
                 length = len(path) if path else 0
                 rand_rows.append({
                     'Prueba': i+1,
                     'Inicio': str(ini),
+                    'Meta': str(fin) if random_fin else '(fija)',
                     'Dist. Manhattan': int(dist),
                     'Algoritmo': nombre,
                     'Longitud': length if length else '—',
@@ -361,9 +387,80 @@ if correr_aleatorios and grid is not None:
         df_rand = pd.DataFrame(rand_rows)
         st.dataframe(df_rand, use_container_width=True, hide_index=True)
 
-        # Mini mapa del último inicio aleatorio con A*
-        st.markdown("**Vista del último punto aleatorio (A* Manhattan):**")
-        ultimo_ini = inicios_rand[-1]
-        path, nodos, t, visited = a_star(grid, ultimo_ini, meta, h_tipo='manhattan')
-        fig = render_maze(grid, visited, path, ultimo_ini, meta)
-        st.pyplot(fig, use_container_width=True)
+        # ─── Métricas agregadas de simulación ───────────────────────────────────
+        st.divider()
+        st.subheader("📈 Análisis comparativo de algoritmos")
+
+        # Agrupar por algoritmo
+        algo_stats = {}
+        for _, row in df_rand.iterrows():
+            algo = row['Algoritmo']
+            if algo not in algo_stats:
+                algo_stats[algo] = {'tiempos': [], 'nodos': [], 'bfactores': [], 'longitudes': []}
+            algo_stats[algo]['tiempos'].append(row['Tiempo (s)'])
+            algo_stats[algo]['nodos'].append(row['Nodos'])
+            algo_stats[algo]['bfactores'].append(row['B-Factor'])
+            algo_stats[algo]['longitudes'].append(row['Longitud'] if row['Longitud'] != '—' else 0)
+
+        # Calcular ganadores
+        avg_times = {algo: np.mean(stats['tiempos']) for algo, stats in algo_stats.items()}
+        total_nodos = {algo: sum(stats['nodos']) for algo, stats in algo_stats.items()}
+        avg_bfactor = {algo: np.mean([b for b in stats['bfactores'] if b > 0]) for algo, stats in algo_stats.items()}
+        avg_length = {algo: np.mean(stats['longitudes']) for algo, stats in algo_stats.items()}
+
+        fastest = min(avg_times, key=avg_times.get)
+        cheapest = min(total_nodos, key=total_nodos.get)
+        best_bfactor = min(avg_bfactor, key=avg_bfactor.get)
+        shortest_paths = min(avg_length, key=avg_length.get)
+
+        # Mostrar métricas en columnas
+        m1, m2, m3, m4 = st.columns(4)
+        
+        with m1:
+            st.markdown(f"### ⚡ Más rápido")
+            st.markdown(f"**{fastest}**")
+            st.caption(f"{avg_times[fastest]:.6f}s promedio")
+
+        with m2:
+            st.markdown(f"### 💰 Más económico")
+            st.markdown(f"**{cheapest}**")
+            st.caption(f"{total_nodos[cheapest]:,} nodos totales")
+
+        with m3:
+            st.markdown(f"### 🎯 Mejor B-Factor")
+            st.markdown(f"**{best_bfactor}**")
+            st.caption(f"{avg_bfactor[best_bfactor]:.4f} promedio")
+
+        with m4:
+            st.markdown(f"### 📏 Caminos más cortos")
+            st.markdown(f"**{shortest_paths}**")
+            st.caption(f"{avg_length[shortest_paths]:.1f} pasos promedio")
+
+        # Tabla de resumen por algoritmo
+        st.divider()
+        st.subheader("📊 Resumen por algoritmo")
+        summary_data = []
+        for algo in sorted(algo_stats.keys()):
+            summary_data.append({
+                'Algoritmo': algo,
+                'Tiempo prom. (s)': round(avg_times[algo], 6),
+                'Nodos totales': f"{total_nodos[algo]:,}",
+                'B-Factor prom.': round(avg_bfactor[algo], 4),
+                'Pasos prom.': round(avg_length[algo], 1),
+            })
+        df_summary = pd.DataFrame(summary_data)
+        st.dataframe(df_summary, use_container_width=True, hide_index=True)
+
+        # Mapas de todos los inicios aleatorios con A*
+        st.divider()
+        st.markdown("### 🗺️ Vistas de todos los puntos aleatorios (A* Manhattan):")
+        for i, (ini, fin) in enumerate(zip(inicios_rand, metas_rand)):
+            col1, col2 = st.columns([2, 1])
+            with col1:
+                path, nodos, t, visited = a_star(grid, ini, fin, h_tipo='manhattan', invertido=invertido)
+                length = len(path) if path else 0
+                st.markdown(f"**Prueba {i+1}** — Inicio: {ini} | Meta: {fin} | Pasos: {length} | Nodos: {nodos:,} | Tiempo: {t:.6f}s")
+                fig = render_maze(grid, visited, path, ini, fin, invertido)
+                st.pyplot(fig, use_container_width=True)
+            with col2:
+                pass
