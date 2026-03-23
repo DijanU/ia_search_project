@@ -1,0 +1,395 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-mono, monospace); }
+#app { padding: 1rem 0; }
+.header { margin-bottom: 1.5rem; }
+.header h1 { font-size: 20px; font-weight: 500; color: var(--color-text-primary); letter-spacing: -0.5px; }
+.header p { font-size: 13px; color: var(--color-text-secondary); margin-top: 4px; }
+.controls { display: grid; grid-template-columns: 1fr auto auto; gap: 8px; align-items: center; margin-bottom: 1rem; }
+.file-label { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); cursor: pointer; font-size: 13px; color: var(--color-text-secondary); background: var(--color-background-primary); transition: background 0.15s; }
+.file-label:hover { background: var(--color-background-secondary); }
+.file-label svg { flex-shrink: 0; }
+#fileInput { display: none; }
+#fileName { color: var(--color-text-primary); font-size: 13px; }
+select { font-size: 13px; padding: 8px 10px; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); background: var(--color-background-primary); color: var(--color-text-primary); cursor: pointer; }
+.run-btn { padding: 8px 18px; font-size: 13px; font-weight: 500; border: 0.5px solid var(--color-border-secondary); border-radius: var(--border-radius-md); background: var(--color-background-primary); color: var(--color-text-primary); cursor: pointer; transition: background 0.15s; white-space: nowrap; }
+.run-btn:hover { background: var(--color-background-secondary); }
+.run-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+.main { display: grid; grid-template-columns: 1fr 340px; gap: 1rem; }
+.canvas-wrap { position: relative; border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; background: var(--color-background-secondary); aspect-ratio: 1; }
+canvas { width: 100%; height: 100%; display: block; image-rendering: pixelated; }
+.overlay-msg { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 13px; color: var(--color-text-secondary); pointer-events: none; }
+.sidebar { display: flex; flex-direction: column; gap: 10px; }
+.metrics { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.metric { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 10px 12px; }
+.metric-label { font-size: 11px; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+.metric-value { font-size: 20px; font-weight: 500; color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.results-table { border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; }
+.results-table table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.results-table th { padding: 8px 10px; text-align: left; font-weight: 500; color: var(--color-text-secondary); background: var(--color-background-secondary); border-bottom: 0.5px solid var(--color-border-tertiary); font-size: 11px; text-transform: uppercase; letter-spacing: 0.4px; }
+.results-table td { padding: 7px 10px; color: var(--color-text-primary); border-bottom: 0.5px solid var(--color-border-tertiary); font-variant-numeric: tabular-nums; }
+.results-table tr:last-child td { border-bottom: none; }
+.results-table tr.active td { background: var(--color-background-info); color: var(--color-text-info); }
+.algo-row { cursor: pointer; transition: background 0.1s; }
+.algo-row:hover td { background: var(--color-background-secondary); }
+.progress-bar { height: 3px; background: var(--color-border-tertiary); border-radius: 2px; overflow: hidden; margin-top: 2px; }
+.progress-fill { height: 100%; background: var(--color-text-info); border-radius: 2px; transition: width 0.3s; }
+.speed-row { display: flex; align-items: center; gap: 10px; font-size: 12px; color: var(--color-text-secondary); }
+.badge { display: inline-block; padding: 2px 8px; border-radius: 100px; font-size: 11px; font-weight: 500; }
+.badge-ok { background: var(--color-background-success); color: var(--color-text-success); }
+.badge-err { background: var(--color-background-danger); color: var(--color-text-danger); }
+.section-title { font-size: 11px; font-weight: 500; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 6px; }
+</style>
+
+<div id="app">
+  <div class="header">
+    <h1>maze solver</h1>
+    <p>Carga un laberinto .txt y visualiza cada algoritmo en tiempo real</p>
+  </div>
+
+  <div class="controls">
+    <label class="file-label" for="fileInput">
+      <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 13V3a1 1 0 011-1h5l2 2h3a1 1 0 011 1v8a1 1 0 01-1 1H3a1 1 0 01-1-1z"/>
+      </svg>
+      <span id="fileName">Seleccionar archivo .txt</span>
+    </label>
+    <input type="file" id="fileInput" accept=".txt">
+    <select id="algoSelect">
+      <option value="bfs">BFS</option>
+      <option value="dfs">DFS</option>
+      <option value="greedy_m">Greedy (Manhattan)</option>
+      <option value="greedy_e">Greedy (Euclidiana)</option>
+      <option value="astar_m" selected>A* (Manhattan)</option>
+      <option value="astar_e">A* (Euclidiana)</option>
+      <option value="all">Todos</option>
+    </select>
+    <button class="run-btn" id="runBtn" disabled>Resolver</button>
+  </div>
+
+  <div class="main">
+    <div class="canvas-wrap">
+      <canvas id="mazeCanvas"></canvas>
+      <div class="overlay-msg" id="overlayMsg">Carga un archivo .txt para comenzar</div>
+    </div>
+
+    <div class="sidebar">
+      <div>
+        <div class="section-title">métricas</div>
+        <div class="metrics">
+          <div class="metric"><div class="metric-label">Longitud</div><div class="metric-value" id="mLen">—</div></div>
+          <div class="metric"><div class="metric-label">Nodos</div><div class="metric-value" id="mNodes">—</div></div>
+          <div class="metric"><div class="metric-label">Tiempo (ms)</div><div class="metric-value" id="mTime">—</div></div>
+          <div class="metric"><div class="metric-label">B-Factor</div><div class="metric-value" id="mBF">—</div></div>
+        </div>
+      </div>
+
+      <div>
+        <div class="speed-row">
+          <span class="section-title" style="margin-bottom:0">velocidad animación</span>
+          <input type="range" id="speedSlider" min="1" max="100" value="50" style="flex:1">
+          <span id="speedVal" style="min-width:30px;text-align:right">50</span>
+        </div>
+        <div class="progress-bar"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
+      </div>
+
+      <div>
+        <div class="section-title">resultados</div>
+        <div class="results-table">
+          <table>
+            <thead><tr><th>Algoritmo</th><th>Long.</th><th>Nodos</th><th>ms</th></tr></thead>
+            <tbody id="resultsBody">
+              <tr><td colspan="4" style="color:var(--color-text-secondary);text-align:center;padding:16px">Sin datos</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+let grid = [], rows = 0, cols = 0, start = null, end = null;
+let animFrame = null, allResults = [];
+
+const canvas = document.getElementById('mazeCanvas');
+const ctx = canvas.getContext('2d');
+const overlay = document.getElementById('overlayMsg');
+const runBtn = document.getElementById('runBtn');
+const fileInput = document.getElementById('fileInput');
+const speedSlider = document.getElementById('speedSlider');
+
+speedSlider.addEventListener('input', () => {
+  document.getElementById('speedVal').textContent = speedSlider.value;
+});
+
+fileInput.addEventListener('change', e => {
+  const file = e.target.files[0];
+  if (!file) return;
+  document.getElementById('fileName').textContent = file.name;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    const lines = ev.target.result.split('\n').filter(l => l.trim().length > 0);
+    grid = lines.map(l => l.replace(/\r/,'').split(''));
+    rows = grid.length;
+    cols = grid[0].length;
+    start = findVal('2');
+    end = findVal('3');
+    canvas.width = cols;
+    canvas.height = rows;
+    overlay.style.display = 'none';
+    runBtn.disabled = false;
+    drawMaze();
+  };
+  reader.readAsText(file);
+});
+
+function findVal(v) {
+  for (let r = 0; r < rows; r++)
+    for (let c = 0; c < cols; c++)
+      if (grid[r][c] === v) return [r, c];
+  return null;
+}
+
+function drawMaze(visited=null, path=null) {
+  const img = ctx.createImageData(cols, rows);
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const i = (r * cols + c) * 4;
+      const cell = grid[r][c];
+      let R=255, G=255, B=255;
+      if (cell === '1') { R=30; G=30; B=30; }
+      else if (cell === '2') { R=59; G=130; B=246; }
+      else if (cell === '3') { R=34; G=197; B=94; }
+      img.data[i]=R; img.data[i+1]=G; img.data[i+2]=B; img.data[i+3]=255;
+    }
+  }
+  if (visited) {
+    for (const [r,c] of visited) {
+      const i = (r*cols+c)*4;
+      if (grid[r][c]==='0') { img.data[i]=219; img.data[i+1]=234; img.data[i+2]=254; img.data[i+3]=255; }
+    }
+  }
+  if (path) {
+    for (const [r,c] of path) {
+      const i = (r*cols+c)*4;
+      img.data[i]=239; img.data[i+1]=68; img.data[i+2]=68; img.data[i+3]=255;
+    }
+  }
+  ctx.putImageData(img, 0, 0);
+}
+
+function heuristic(a, b, type='manhattan') {
+  if (type==='manhattan') return Math.abs(a[0]-b[0])+Math.abs(a[1]-b[1]);
+  return Math.sqrt((a[0]-b[0])**2+(a[1]-b[1])**2);
+}
+
+function getNeighbors(r, c) {
+  const moves = [[-1,0],[0,1],[1,0],[0,-1]];
+  return moves.map(([dr,dc])=>[r+dr,c+dc])
+    .filter(([nr,nc])=> nr>=0&&nr<rows&&nc>=0&&nc<cols&&grid[nr][nc]!=='1');
+}
+
+function reconstructPath(parent, endNode) {
+  const path = [];
+  let cur = endNode.join(',');
+  while (cur) {
+    path.push(cur.split(',').map(Number));
+    cur = parent[cur];
+  }
+  return path.reverse();
+}
+
+function runBFS() {
+  const queue = [[...start]];
+  const visited = new Set([start.join(',')]);
+  const parent = {[start.join(',')]: null};
+  const visitedOrder = [];
+  let nodesExplored = 0;
+  const t0 = performance.now();
+  while (queue.length) {
+    const cur = queue.shift();
+    nodesExplored++;
+    visitedOrder.push(cur);
+    if (cur[0]===end[0]&&cur[1]===end[1]) {
+      const path = reconstructPath(parent, cur);
+      return { path, nodesExplored, time: performance.now()-t0, visitedOrder };
+    }
+    for (const nb of getNeighbors(cur[0],cur[1])) {
+      const k = nb.join(',');
+      if (!visited.has(k)) { visited.add(k); parent[k]=cur.join(','); queue.push(nb); }
+    }
+  }
+  return { path:null, nodesExplored, time: performance.now()-t0, visitedOrder };
+}
+
+function runDFS() {
+  const stack = [[...start]];
+  const visited = new Set([start.join(',')]);
+  const parent = {[start.join(',')]: null};
+  const visitedOrder = [];
+  let nodesExplored = 0;
+  const t0 = performance.now();
+  while (stack.length) {
+    const cur = stack.pop();
+    nodesExplored++;
+    visitedOrder.push(cur);
+    if (cur[0]===end[0]&&cur[1]===end[1]) {
+      const path = reconstructPath(parent, cur);
+      return { path, nodesExplored, time: performance.now()-t0, visitedOrder };
+    }
+    const nbs = getNeighbors(cur[0],cur[1]).reverse();
+    for (const nb of nbs) {
+      const k = nb.join(',');
+      if (!visited.has(k)) { visited.add(k); parent[k]=cur.join(','); stack.push(nb); }
+    }
+  }
+  return { path:null, nodesExplored, time: performance.now()-t0, visitedOrder };
+}
+
+function runGreedy(hType) {
+  const h0 = heuristic(start, end, hType);
+  const pq = [[h0, [...start]]];
+  const visited = new Set([start.join(',')]);
+  const parent = {[start.join(',')]: null};
+  const visitedOrder = [];
+  let nodesExplored = 0;
+  const t0 = performance.now();
+  while (pq.length) {
+    pq.sort((a,b)=>a[0]-b[0]);
+    const [,cur] = pq.shift();
+    nodesExplored++;
+    visitedOrder.push(cur);
+    if (cur[0]===end[0]&&cur[1]===end[1]) {
+      const path = reconstructPath(parent, cur);
+      return { path, nodesExplored, time: performance.now()-t0, visitedOrder };
+    }
+    for (const nb of getNeighbors(cur[0],cur[1])) {
+      const k = nb.join(',');
+      if (!visited.has(k)) { visited.add(k); parent[k]=cur.join(','); pq.push([heuristic(nb,end,hType),nb]); }
+    }
+  }
+  return { path:null, nodesExplored, time: performance.now()-t0, visitedOrder };
+}
+
+function runAStar(hType) {
+  const h0 = heuristic(start, end, hType);
+  const pq = [[h0, 0, [...start]]];
+  const gScore = {[start.join(',')]: 0};
+  const parent = {[start.join(',')]: null};
+  const visitedOrder = [];
+  let nodesExplored = 0;
+  const t0 = performance.now();
+  while (pq.length) {
+    pq.sort((a,b)=>a[0]-b[0]);
+    const [,g,cur] = pq.shift();
+    const ck = cur.join(',');
+    if (g > (gScore[ck]??Infinity)) continue;
+    nodesExplored++;
+    visitedOrder.push(cur);
+    if (cur[0]===end[0]&&cur[1]===end[1]) {
+      const path = reconstructPath(parent, cur);
+      return { path, nodesExplored, time: performance.now()-t0, visitedOrder };
+    }
+    for (const nb of getNeighbors(cur[0],cur[1])) {
+      const k = nb.join(',');
+      const ng = g+1;
+      if (ng < (gScore[k]??Infinity)) {
+        gScore[k]=ng; parent[k]=ck;
+        pq.push([ng+heuristic(nb,end,hType), ng, nb]);
+      }
+    }
+  }
+  return { path:null, nodesExplored, time: performance.now()-t0, visitedOrder };
+}
+
+function calcBF(nodes, depth) {
+  if (!depth || nodes<=1) return 0;
+  return Math.pow(nodes, 1/depth);
+}
+
+function updateMetrics(res) {
+  const len = res.path ? res.path.length : 0;
+  document.getElementById('mLen').textContent = len || '—';
+  document.getElementById('mNodes').textContent = res.nodesExplored.toLocaleString();
+  document.getElementById('mTime').textContent = res.time.toFixed(1);
+  document.getElementById('mBF').textContent = calcBF(res.nodesExplored, len).toFixed(3);
+}
+
+function updateResultsTable() {
+  const tbody = document.getElementById('resultsBody');
+  if (!allResults.length) return;
+  tbody.innerHTML = allResults.map(r => `
+    <tr class="algo-row" data-name="${r.name}">
+      <td>${r.name}</td>
+      <td>${r.path ? r.path.length : '—'}</td>
+      <td>${r.nodesExplored.toLocaleString()}</td>
+      <td>${r.time.toFixed(1)}</td>
+    </tr>
+  `).join('');
+  tbody.querySelectorAll('.algo-row').forEach(row => {
+    row.addEventListener('click', () => {
+      tbody.querySelectorAll('.algo-row').forEach(r=>r.classList.remove('active'));
+      row.classList.add('active');
+      const res = allResults.find(r=>r.name===row.dataset.name);
+      if (res) { updateMetrics(res); drawMaze(res.visitedOrder, res.path); }
+    });
+  });
+}
+
+function animateResult(res, onDone) {
+  if (animFrame) cancelAnimationFrame(animFrame);
+  const speed = parseInt(speedSlider.value);
+  const batchSize = Math.max(1, Math.floor(speed * rows * cols / 5000));
+  const visited = res.visitedOrder;
+  let i = 0;
+  const visitedSoFar = [];
+  function step() {
+    const end_i = Math.min(i + batchSize, visited.length);
+    for (; i < end_i; i++) visitedSoFar.push(visited[i]);
+    drawMaze(visitedSoFar, null);
+    document.getElementById('progressFill').style.width = (i/visited.length*100).toFixed(1)+'%';
+    if (i < visited.length) { animFrame = requestAnimationFrame(step); }
+    else {
+      drawMaze(visitedSoFar, res.path);
+      document.getElementById('progressFill').style.width = '100%';
+      if (onDone) onDone();
+    }
+  }
+  animFrame = requestAnimationFrame(step);
+}
+
+const ALGO_MAP = {
+  bfs: { name:'BFS', fn: ()=>runBFS() },
+  dfs: { name:'DFS', fn: ()=>runDFS() },
+  greedy_m: { name:'Greedy (M)', fn: ()=>runGreedy('manhattan') },
+  greedy_e: { name:'Greedy (E)', fn: ()=>runGreedy('euclidean') },
+  astar_m: { name:'A* (M)', fn: ()=>runAStar('manhattan') },
+  astar_e: { name:'A* (E)', fn: ()=>runAStar('euclidean') },
+};
+
+runBtn.addEventListener('click', () => {
+  if (!grid.length) return;
+  runBtn.disabled = true;
+  if (animFrame) cancelAnimationFrame(animFrame);
+  allResults = [];
+  document.getElementById('progressFill').style.width = '0%';
+
+  const sel = document.getElementById('algoSelect').value;
+  const toRun = sel === 'all' ? Object.keys(ALGO_MAP) : [sel];
+
+  let idx = 0;
+  function runNext() {
+    if (idx >= toRun.length) { runBtn.disabled = false; updateResultsTable(); return; }
+    const key = toRun[idx++];
+    const { name, fn } = ALGO_MAP[key];
+    const res = fn();
+    res.name = name;
+    allResults.push(res);
+    updateMetrics(res);
+    animateResult(res, runNext);
+  }
+  runNext();
+});
+</script>
